@@ -1,90 +1,156 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import "./PricingForm.css";
 
-export default function PricingForm() {
-  const [formData, setFormData] = useState<{
-    productName: string;
-    competitorPrice: number;
-    costBase: string;
-    targetMargin: string;
-    productCategory: string;
-    suggestedPrice: number | null;
-    grossMargin: number | null;
-    summary: string;
-  }>({
-    productName: "Sample Product",
-    competitorPrice: 19.99,
-    costBase: "",
-    targetMargin: "",
-    productCategory: "",
-    suggestedPrice: null,
-    grossMargin: null,
-    summary: ""
+type Product = {
+  name: string;
+  price: number;
+  rating?: string;
+};
+
+type FormState = {
+  productName: string;
+  competitorPrice: number;
+  rating?: string;
+  costBase: number;
+  targetMargin: number;
+};
+
+const cleanPrice = (priceStr: string): number => {
+  const match = priceStr.match(/[\d,.]+/);
+  return match ? parseFloat(match[0].replace(/,/g, "")) : 0;
+};
+
+const PricingForm = () => {
+  const [productData, setProductData] = useState<Product[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [formState, setFormState] = useState<FormState>({
+    productName: "",
+    competitorPrice: 0,
+    rating: "",
+    costBase: 0,
+    targetMargin: 0,
   });
 
-  const handleChange = (e : any) => {
+  useEffect(() => {
+    fetch("/data/scraped-data.json")
+      .then((res) => res.json())
+      .then((raw: any[]) => {
+        const cleaned = raw
+          .filter((item) => item.name && item.price)
+          .map((item) => ({
+            name: item.name.trim(),
+            price: cleanPrice(item.price),
+            rating: item.rating || "",
+          }));
+        setProductData(cleaned);
+        if (cleaned.length > 0) {
+          setFormState((prev) => ({
+            ...prev,
+            productName: cleaned[0].name,
+            competitorPrice: cleaned[0].price,
+            rating: cleaned[0].rating,
+          }));
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    const selected = productData[selectedIndex];
+    if (selected) {
+      setFormState((prev) => ({
+        ...prev,
+        productName: selected.name,
+        competitorPrice: selected.price,
+        rating: selected.rating,
+      }));
+    }
+  }, [selectedIndex, productData]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e :any) => {
-    e.preventDefault();
-    const cost = parseFloat(formData.costBase);
-    const margin = parseFloat(formData.targetMargin) / 100;
-    const suggested = cost * (1 + margin);
-    const gross = ((suggested - cost) / suggested) * 100;
-
-    setFormData((prev) => ({
+    setFormState((prev) => ({
       ...prev,
-      suggestedPrice: suggested,
-      grossMargin: gross,
-      summary: `Based on competitor pricing and your target margin, a suggested price of $${suggested.toFixed(2)} maximizes profitability while remaining competitive. Gross margin is estimated at ${gross.toFixed(2)}%.`
+      [name]: name === "costBase" || name === "targetMargin" ? parseFloat(value) : value,
     }));
-
-    // TODO: Save to spreadsheet & optionally call LLM
   };
 
   return (
-    <div style={{ maxWidth: 600, margin: "2rem auto", fontFamily: "sans-serif" }}>
-      <h1 style={{ textAlign: "center", marginBottom: "2rem" }}>Pricing Recommendation Tool</h1>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+    <form className="pricing-form" onSubmit={(e) => e.preventDefault()}>
+      <h2>Pricing Form</h2>
+
+      <div className="form-group">
+        <div className="form-label">
+          <label htmlFor="productSelect">Choose Product:</label>
+        </div>
+        <div className="form-field">
+          <select
+            id="productSelect"
+            value={selectedIndex}
+            onChange={(e) => setSelectedIndex(Number(e.target.value))}
+          >
+            {productData.map((p, i) => (
+              <option key={i} value={i}>
+                {p.name.slice(0, 80)}...
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <div className="form-label">
           <label htmlFor="productName">Product Name:</label>
-          <input name="productName" id="productName" value={formData.productName} readOnly style={{ padding: "0.5rem" }} />
         </div>
+        <div className="form-field">
+          <input type="text" id="productName" name="productName" value={formState.productName} readOnly />
+        </div>
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
+      <div className="form-group">
+        <div className="form-label">
           <label htmlFor="competitorPrice">Competitor Price:</label>
-          <input name="competitorPrice" id="competitorPrice" value={formData.competitorPrice} readOnly style={{ padding: "0.5rem" }} />
         </div>
+        <div className="form-field">
+          <input type="number" id="competitorPrice" name="competitorPrice" value={formState.competitorPrice} readOnly />
+        </div>
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
+      <div className="form-group">
+        <div className="form-label">
+          <label htmlFor="rating">Rating:</label>
+        </div>
+        <div className="form-field">
+          <input type="text" id="rating" name="rating" value={formState.rating} readOnly />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <div className="form-label">
           <label htmlFor="costBase">Cost Base:</label>
-          <input name="costBase" id="costBase" type="number" value={formData.costBase} onChange={handleChange} required style={{ padding: "0.5rem" }} />
         </div>
+        <div className="form-field">
+          <input type="number" id="costBase" name="costBase" value={formState.costBase} onChange={handleChange} />
+        </div>
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
+      <div className="form-group">
+        <div className="form-label">
           <label htmlFor="targetMargin">Target Margin (%):</label>
-          <input name="targetMargin" id="targetMargin" type="number" value={formData.targetMargin} onChange={handleChange} required style={{ padding: "0.5rem" }} />
         </div>
-
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <label htmlFor="productCategory">Product Category:</label>
-          <input name="productCategory" id="productCategory" value={formData.productCategory} onChange={handleChange} style={{ padding: "0.5rem" }} />
+        <div className="form-field">
+          <input
+            type="number"
+            id="targetMargin"
+            name="targetMargin"
+            value={formState.targetMargin}
+            onChange={handleChange}
+          />
         </div>
+      </div>
 
-        <button type="submit" style={{ padding: "0.75rem", fontWeight: "bold", cursor: "pointer" }}>
-          Calculate Recommendation
-        </button>
-      </form>
-
-      {formData.suggestedPrice !== null && (
-        <div style={{ marginTop: "2rem", padding: "1rem", border: "1px solid #ccc", borderRadius: "8px", backgroundColor: "#f9f9f9" }}>
-          <h3>Recommendation Summary</h3>
-          <p>Suggested Price: ${formData.suggestedPrice.toFixed(2)}</p>
-          <p>Gross Margin: {formData.grossMargin?.toFixed(2)}%</p>
-          <p><strong>CFO Review:</strong> {formData.summary}</p>
-        </div>
-      )}
-    </div>
+      <button type="submit">Submit</button>
+    </form>
   );
-}
+};
+
+export default PricingForm;
